@@ -37,9 +37,9 @@ extern u8 D_802A2EB8[];  // "sptop : %08lx"
 extern u8 D_802A2EC8[];  // "spbtm : %08lx"
 
 // External functions
-extern void func_80297D38(char *str, ...);
-extern s32 func_80297D90(s32, s32, s32);
-extern void func_80297D30(s32, void*);
+extern void func_800018F8__0x0000__secure_call(char *str, ...);
+extern s32 osRecvMesg__0x0000__secure_call(s32, s32, s32);
+extern void set_secure_call_arr__0x0000__secure_call(s32, void*);
 
 // Process pool
 extern struct Process D_80063370[];

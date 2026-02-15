@@ -150,18 +150,18 @@ RECOMP_PATCH s32 HuPrcStackCheck(struct Process *process) {
     // In native recompiled code, we don't have direct access to MIPS stack
     // This function is mainly for debugging - return a safe value
     
-    func_80297D38((char*)D_802A2E80, process->id);
-    func_80297D38((char*)D_802A2E8C, process->pri);
-    func_80297D38((char*)D_802A2E98, process->func);
+    func_800018F8__0x0000__secure_call((char*)D_802A2E80, process->id);
+    func_800018F8__0x0000__secure_call((char*)D_802A2E8C, process->pri);
+    func_800018F8__0x0000__secure_call((char*)D_802A2E98, process->func);
 
     // These values are placeholders since native stack is different
     D_802AC34C = (s32)process->sptop;
     D_802AC350 = (u32)(process->sptop + process->stackSize);
     D_802AC354 = D_802AC350 - 0x100;
 
-    func_80297D38((char*)D_802A2EA8, D_802AC354);
-    func_80297D38((char*)D_802A2EB8, D_802AC34C);
-    func_80297D38((char*)D_802A2EC8, D_802AC350);
+    func_800018F8__0x0000__secure_call((char*)D_802A2EA8, D_802AC354);
+    func_800018F8__0x0000__secure_call((char*)D_802A2EB8, D_802AC34C);
+    func_800018F8__0x0000__secure_call((char*)D_802A2EC8, D_802AC350);
 
     // Return "plenty of stack remaining"
     return process->stackSize / 2;
@@ -186,11 +186,11 @@ RECOMP_PATCH s32 HuPrcWaitCond(s32 arg0, s32 arg1, s32 arg2) {
     s32 result;
 
     if (arg2 != 1) {
-        return func_80297D90(arg0, arg1, 0);
+        return osRecvMesg__0x0000__secure_call(arg0, arg1, 0);
     }
 
     // Loop until condition is met, yielding each iteration
-    while ((result = func_80297D90(arg0, arg1, 0)) != 0) {
+    while ((result = osRecvMesg__0x0000__secure_call(arg0, arg1, 0)) != 0) {
         yield_to_scheduler(YIELD_NORMAL);
     }
     return result;
@@ -512,5 +512,5 @@ RECOMP_PATCH void HuPrcLink(struct Process *arg0, struct Process *arg1) {
 }
 
 RECOMP_PATCH void HuPrcInitDebug(void) {
-    func_80297D30(0x19, &D_802A0100);
+    set_secure_call_arr__0x0000__secure_call(0x19, &D_802A0100);
 }

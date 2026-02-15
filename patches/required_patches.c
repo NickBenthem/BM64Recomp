@@ -49,7 +49,7 @@ struct UnkStruct802A538C {
     char pad[0x40];  
 };
 
-extern struct UnkStruct800BD5B0 D_800BD5B0[];
+extern struct UnkStruct800BD5B0 gFrameBuffers[];
 extern Mtx* D_802A538C;
 extern Mtx D_802A53D8;
 
@@ -87,12 +87,12 @@ typedef struct {
 // hack, due to long width issues
 extern NewLights2 D_8029F800 __attribute__((aligned(8)));
 
-void *Libc_Memcpy(void *dest, void *source, s32 c);
-
 extern void *func_80227678(u32);
 void func_80297D60(void *, s32);
 
 typedef unsigned int uintptr_t;
+
+void *Libc_Memcpy(uintptr_t dest, uintptr_t source, s32 c);
 
 struct UnkStruct802AC5C0 {
     u16 unk0;
@@ -115,7 +115,7 @@ extern s32 D_802A53C0;
 extern s32 D_802A53C4;
 extern s32 D_802A53C8;
 
-s32 HuPrcCreate(s32*, s32, s32, s32, s32);                  /* extern */
+s32 HuPrcCreate(s32*, s32, u8 *, s32, s32);                  /* extern */
 s32 func_802276FC(s32);                                 /* extern */
 void *func_8022A6C4(void *, s32);                        /* extern */
 struct UnkStruct802B0308_Inner *func_8026CE28(s32);                        /* extern */
@@ -538,7 +538,7 @@ RECOMP_PATCH void func_8000083C(s32 id, void *vAddr, s32 arg) {
     if(!vAddr) {} // fake check to bump regalloc. see above note
 }
 
-extern u32 D_8001BFC0[];
+extern u32 gSecureCallArr[];
 extern void n64main(void);
 
 extern u32 D_80042000[];
@@ -550,7 +550,7 @@ RECOMP_PATCH void set_zero_vaddr_tlb(void) {
     //load_from_rom_to_addr(D_80042000, (u32)&zerojump_ROM_END - (u32)&zerojump_ROM_START, (u32)&zerojump_ROM_START);
     // Not used.
     //osMapTLB(0, 0, NULL, (u32) (((u32) (&D_80042000)) - 0x80000000), -1, -1);
-    D_8001BFC0[0] = 0x80019f80; // this feels dirty hardcoding it, but whatever.
+    gSecureCallArr[0] = 0x80019f80; // this feels dirty hardcoding it, but whatever.
 }
 
 extern s32 D_802A5328;
@@ -743,6 +743,8 @@ u8* Libc_Memset(u8* arg0, u8* arg1, s32 arg2);
 
 extern u8 *func_802998EC(int);
 
+extern void osWritebackDCache__0x0000__secure_call(void *, s32);
+
 RECOMP_PATCH void func_80292BD0(s32 arg0, u8* arg1, s32 arg2) {
     s32 size;
     s32 i;
@@ -781,7 +783,7 @@ RECOMP_PATCH void func_80292BD0(s32 arg0, u8* arg1, s32 arg2) {
             arg2 -= i;
         }
     }
-    func_80297D60((void*)(((u32) (sp44 + 0xF) >> 4) * 0x10), ((u32) (arg2 + 0xF) >> 4) * 0x10);
+    //osWritebackDCache__0x0000__secure_call((void*)(((u32) (sp44 + 0xF) >> 4) * 0x10), ((u32) (arg2 + 0xF) >> 4) * 0x10);
     func_8029ADCC(D_802B0310);
     D_802A1D90 = 0;
 }
@@ -942,12 +944,13 @@ extern Gfx* gMasterDisplayList; // D_802A5390
 void func_802272B0(Gfx** gfxP);
 
 RECOMP_PATCH Gfx *func_80227464(void) {
-    D_802A5388 = D_8029F5E0;
+    D_802A5388 = (D_8029F5E0 == 0) ? 1 : 0;
     D_802A538C = &D_8014C8D0[D_802A5388 * 0x27000];
     gMasterDisplayList = (Gfx *)((u8*)(D_802A538C) + 0x24000);
     D_802A5368 = 0;
 
     gEXEnable(gMasterDisplayList++);
+    gEXSetRectAspect(gMasterDisplayList++, G_EX_ASPECT_STRETCH);
 
     gSPSegment(gMasterDisplayList++, 0x00, 0x00000000);
     gSPSegment(gMasterDisplayList++, 0x01, (void* ) (((u32)D_802A5388 * 0x25800) + 0x80000000 + (u8*)&D_80100000));
@@ -961,6 +964,7 @@ RECOMP_PATCH Gfx *func_80227464(void) {
     gDPSetDepthImage(gMasterDisplayList++, D_200000);
     gDPPipeSync(gMasterDisplayList++);
     gDPSetScissor(gMasterDisplayList++, G_SC_NON_INTERLACE, 8, 6, 311, 233);
+    
     func_802272B0(&gMasterDisplayList);
     gSPSetGeometryMode(gMasterDisplayList++, G_ZBUFFER | G_CULL_BACK | G_LIGHTING);
     gDPSetRenderMode(gMasterDisplayList++, G_RM_AA_ZB_TEX_EDGE, G_RM_AA_ZB_TEX_EDGE2);
@@ -1013,4 +1017,172 @@ RECOMP_PATCH void func_802276E0(s32 arg0, s32 arg1, s32 arg2) {
     D_8029F5EC = arg0;
     D_8029F5F0 = arg1;
     D_8029F5F4 = arg2;
+}
+
+u8* Libc_Memset(u8* arg0, u8* arg1, s32 arg2);
+void func_80225CA8();                         /* extern */
+void func_80226860();                         /* extern */
+void func_80226D80();                         /* extern */
+void func_80226E84(void *);                   /* extern */
+void func_80227708(s32, s32, s32, s32);       /* extern */
+s32 func_8022773C();                          /* extern */
+void func_802277D0();                         /* extern */
+void func_8022787C(Gfx** mainGfx);
+void func_802290CC();                         /* extern */
+void func_8022A858();                         /* extern */
+s32 func_80232E60();                          /* extern */
+s32 func_802341C8();                          /* extern */
+s32 func_80237890();                          /* extern */
+s32 func_80238100();                          /* extern */
+s32 func_802381F8();                          /* extern */
+s32 func_8023876C(s32, s32, s32);             /* extern */
+s32 func_8023A104();                          /* extern */
+s32 func_8023A208();                          /* extern */
+s32 func_8023A22C();                          /* extern */
+s32 func_8023A318();                          /* extern */
+s32 func_8023A3E0();                          /* extern */
+s32 func_8025E16C();                          /* extern */
+s32 func_8025E1D4(void **);                   /* extern */
+s32 g_initRandom(u32);                       /* extern */
+s32 func_80265C04();                          /* extern */
+s32 func_8026C208();                          /* extern */
+s32 func_8026C77C();                          /* extern */
+s32 func_802817D0();                          /* extern */
+s32 func_80292B54();                          /* extern */
+s32 func_80294E54();                          /* extern */
+s32 func_80297D20();                          /* extern */
+u64 osGetTime__0x0000__secure_call();                          /* extern */
+s32 osViSetSpecialFeatures__0x0000__secure_call(s32);                       /* extern */
+s32 osViBlack__0x0000__secure_call(s32);                       /* extern */
+extern u8 D_80063000[];
+extern u8 D_800BEA60[];
+extern s32 D_8029F570;
+extern s32 D_8029F590;
+extern s32 D_802A1230;
+extern s32 D_802A1234;
+extern s32 D_802A123C;
+extern u8 D_802A5300[];
+extern struct UnkStruct802AC5C0 *D_802AC5C0;
+extern u8 D_802B36D0[];
+extern s32 func_802334CC;
+extern s32 func_80236F54;
+extern void set_secure_call_arr__0x0000__secure_call(int, void *);
+
+extern void HuPrcInit(void);
+extern void HuPrcCall(void);
+
+RECOMP_PATCH void func_80225840(s32 arg0)
+{
+    u8 *temp_s0; 
+    Gfx *mainGfx;
+    s32 sp3C;  
+    s32 var_s1; 
+    void *temp_v0;
+
+    var_s1 = 8;
+    func_80297D20();
+    Libc_Memset(&D_802A5300, 0, D_802B36D0 - D_802A5300);
+    Libc_Memset(&D_80063000, 0, D_800BEA60 - D_80063000);
+    func_80225CA8();
+    set_secure_call_arr__0x0000__secure_call(4, &D_8029F570);
+    set_secure_call_arr__0x0000__secure_call(5, &D_8029F590);
+    func_802341C8();
+    func_8023876C(arg0, 0xA, 0xA);
+    osViSetSpecialFeatures__0x0000__secure_call(2);
+    osViSetSpecialFeatures__0x0000__secure_call(4);
+    osViSetSpecialFeatures__0x0000__secure_call(0x40);
+    osViSetSpecialFeatures__0x0000__secure_call(0x10);
+    HuPrcInit();
+    func_8023A318();
+    func_8023A22C();
+    func_80294E54();
+    D_802A1230 = 0;
+    D_802A1234 = 0;
+    D_802A123C = 0;
+    func_80226860();
+    func_8022A858();
+    func_80232E60();
+    func_802817D0();
+    func_80292B54();
+    func_802277D0();
+    func_80226D80();
+    func_8025E16C();
+    sp3C = func_8022773C();
+    func_8026C77C();
+    g_initRandom(osGetTime__0x0000__secure_call());
+    temp_s0 = func_802998EC(0x1000);
+    func_80237890();
+    HuPrcCreate(&func_80236F54, 0, temp_s0, 0x1000, 0x401);
+    HuPrcCreate(&func_802334CC, 0, 0, 0, 0x402);
+    func_8023A208();
+    func_8023A3E0();
+    func_80265C04();
+
+    while (TRUE) {
+        func_8023A104();
+        mainGfx = func_80227464();
+        func_80238100();
+        func_802381F8();
+        HuPrcCall();
+        
+        func_8022787C(&mainGfx);
+        func_802290CC();
+
+        temp_v0 = func_80227678(sp3C);
+        gSPDisplayList(mainGfx++, temp_v0);
+        
+
+        func_8025E1D4(&mainGfx);
+        func_8026C208();
+        func_8023A208();
+        func_80226E84(mainGfx);
+
+        if (var_s1 == 0) {
+            continue;
+        }
+
+        if (--var_s1 != 0) {
+            continue;
+        }
+
+        func_80227D50(D_802AC5C0, 8, 6, 304, 228);
+        func_80227708(8, 6, 304, 228);
+        osViBlack__0x0000__secure_call(0);
+    }
+}
+
+RECOMP_PATCH void func_8022787C(Gfx** mainGfx) {
+    struct UnkStruct800BD5B0 *temp_s5;
+    struct UnkStruct800BD5B0 *var_s0;
+    Gfx* gfx;
+    s32 i;
+    
+    gfx = *mainGfx;
+
+    gSPSetLights2(gfx++, D_8029F800);
+    gSPPerspNormalize(gfx++, D_802A53D0);
+
+    var_s0 = &gFrameBuffers;
+
+    for (i = 0; i < 4; i++) {
+        temp_s5 = &gFrameBuffers[i];
+        if ((temp_s5->unk10 != 0) && (temp_s5->unk58 != 0)) {
+            Libc_Memcpy((uintptr_t)D_802A538C + (D_802A5368 * sizeof(Mtx)), (uintptr_t)&D_802A53D8, sizeof(Mtx));
+            gSPMatrix(gfx++, (uintptr_t)D_802A538C + (D_802A5368 * sizeof(Mtx)), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
+            D_802A5368++;
+            gSPViewport(gfx++, &temp_s5->unk_00);
+            Libc_Memcpy((uintptr_t)D_802A538C + (D_802A5368 * sizeof(Mtx)), (uintptr_t)&temp_s5->unk_18, sizeof(Mtx));
+            gSPMatrix(gfx++, (uintptr_t)D_802A538C + (D_802A5368 * sizeof(Mtx)), G_MTX_NOPUSH | G_MTX_MUL | G_MTX_PROJECTION);
+            D_802A5368++;
+            gDPSetScissor(gfx++, G_SC_NON_INTERLACE, temp_s5->unk5C, temp_s5->unk60, temp_s5->unk64, temp_s5->unk68);
+            gSPDisplayList(gfx++, func_80227678(temp_s5->unk14));
+        }
+    }
+    *mainGfx = gfx;
+    //osWritebackDCache(temp_s5, 0x1C0);
+}
+
+RECOMP_PATCH void func_802268F4(void) {
+    gEXSetRectAspect(gMasterDisplayList++, G_EX_ASPECT_AUTO);
+    D_802A532C();
 }
