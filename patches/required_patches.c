@@ -264,15 +264,8 @@ extern OSMesgQueue D_8001C418;
 extern s32 D_8001C430;
 
 RECOMP_PATCH void load_from_rom_to_addr(void* vAddr, s32 size, u32 devAddr) {
-    recomp_printf("Load (load_from_rom_to_addr): devAddr (0x%08X) vAddr (0x%08X) size (0x%08X)\n", devAddr, vAddr, size);
-
-    if (D_8001C3F8 != 0) {
-        do {
-            osYieldThread();
-        } while (D_8001C3F8 != 0);
-    }
-    D_8001C3F8 = 1;
-    
+    //recomp_printf("Load (load_from_rom_to_addr): devAddr (0x%08X) vAddr (0x%08X) size (0x%08X)\n", devAddr, vAddr, size);
+   
     switch(devAddr) {
         case 0x00122016: recomp_load_overlays(0x00800010, (void*) 0x80043000, 0x000019E0); gOverlayID = LOADED_OVL_1_SUBOVL_1; break;
         case 0x00122B34: recomp_load_overlays(0x008019F0, (void*) 0x80043000, 0x00001AD0); gOverlayID = LOADED_OVL_1_SUBOVL_2; break;
@@ -380,8 +373,6 @@ RECOMP_PATCH void load_from_rom_to_addr(void* vAddr, s32 size, u32 devAddr) {
 
     osPiStartDma_recomp(&D_8001C400, 0, 0, devAddr, vAddr, (u32) size, &D_8001C418);
 
-    // yield_self_1ms();
-
     osRecvMesg(&D_8001C418, NULL, 1);
     D_8001C3F8 = 0;
 }
@@ -392,12 +383,6 @@ RECOMP_PATCH void func_8000064C(void* vramAddr, u32 size, u32 devAddr) {
 }
 
 RECOMP_PATCH void func_8000059C(s32 devAddr, u32 size, void* vramAddr) {
-    if (D_8001C3F8 != 0) {
-        do {
-            osYieldThread();
-        } while (D_8001C3F8 != 0);
-    }
-    D_8001C3F8 = 1;
     //osWritebackDCache(vramAddr, devAddr);
     recomp_load_overlays(devAddr, vramAddr, size); //@recomp patch
     osPiStartDma_recomp(&D_8001C400, 0, 1, (u32) devAddr, vramAddr, size, &D_8001C418);
@@ -512,7 +497,6 @@ extern OSMesg D_802A53B8;
 extern s32 D_802A53CC;
 extern s32 D_802A5800;
 
-/*
 RECOMP_PATCH Gfx *Gfx_InitGfx(void) {
     gBackBufferID = gFrontBufferID; // we are now using the back buffer to start a new frame rendering.
     gGfxWorkPtr = &gGfxWork[gBackBufferID];
@@ -520,15 +504,8 @@ RECOMP_PATCH Gfx *Gfx_InitGfx(void) {
     D_802A5368 = 0;
     static int frameCount = 0;
 
-    //gEXEnable(gMasterDisplayList++);
-    //gEXSetRefreshRate(gMasterDisplayList++, 60); // this game runs at a native 60.
-
-    // this is a STUPID hack to ensure the copyright screen isnt stretched.
-    if (frameCount == 530) {
-        //gEXSetRectAspect(gMasterDisplayList++, G_EX_ASPECT_STRETCH);
-    } else {
-        frameCount++;
-    }
+    gEXEnable(gMasterDisplayList++);
+    gEXSetRefreshRate(gMasterDisplayList++, 60); // this game runs at a native 60.
 
     gSPSegment(gMasterDisplayList++, 0x00, 0x00000000);
     gSPSegment(gMasterDisplayList++, 0x01, (void* ) ((u8*)&D_80100000[gBackBufferID] + 0x80000000));
@@ -547,7 +524,6 @@ RECOMP_PATCH Gfx *Gfx_InitGfx(void) {
     gDPSetRenderMode(gMasterDisplayList++, G_RM_AA_ZB_TEX_EDGE, G_RM_AA_ZB_TEX_EDGE2);
     return gMasterDisplayList;
 }
-*/
 
 u8* Libc_Memset(u8* arg0, u8* arg1, s32 arg2);
 void func_80225CA8();                         /* extern */
@@ -638,7 +614,6 @@ typedef unsigned int uintptr_t;
 
 void *Libc_Memcpy(uintptr_t dest, uintptr_t source, s32 c);
 
-/*
 RECOMP_PATCH void func_8022787C(Gfx** mainGfx) {
     Gfx* gfx;
     s32 i;
@@ -664,10 +639,8 @@ RECOMP_PATCH void func_8022787C(Gfx** mainGfx) {
         }
     }
     *mainGfx = gfx;
-    //osWritebackDCache(buffer, 0x1C0);
+    osWritebackDCache(buffer, 0x1C0);
 }
-*/
-
 
 extern void osViSetSpecialFeatures__0x0000__secure_call(s32);
 void func_80227D50(struct UnkStruct802AC5C0* arg0, u32 arg1, u32 arg2, u32 arg3, u32 arg4);
@@ -702,7 +675,9 @@ RECOMP_PATCH void func_80227D50(struct UnkStruct802AC5C0* arg0, u32 arg1, u32 ar
     arg0->unk68 = ((arg2 + arg4));
 }
 
-/*
+extern void (*D_802B36AC)(void *); // __free_hook
+void free_hook(void *);
+
 RECOMP_PATCH void func_80225840(void *arg0) {
     void *temp_s0; 
     Gfx *mainGfx;
@@ -748,6 +723,8 @@ RECOMP_PATCH void func_80225840(void *arg0) {
     func_8023A3E0();
     func_80265C04();
 
+    D_802B36AC = free_hook;
+
     while (TRUE) {
         func_8023A104();           // receive message from the cont mesg queue and run osContGetReadData
         mainGfx = Gfx_InitGfx();   // init gfx
@@ -781,7 +758,6 @@ RECOMP_PATCH void func_80225840(void *arg0) {
         osViBlack(0);
     }
 }
-*/
 
 /*
 RECOMP_PATCH void func_802268F4(void) {
@@ -805,8 +781,7 @@ RECOMP_EXPORT void startGfxWait(Gfx *gfx_start) {
 }
 
 RECOMP_EXPORT void waitForGfxFinish(void) {
-    // @recomp Wait for the displaylist to be completed after submitting it. This removes the race condition
-    // that exists with vertex modifications for texture scrolling.
+    // @recomp Wait for the displaylist to be completed after submitting it.
     osRecvMesg(&dl_complete_queue, NULL, OS_MESG_BLOCK);
 }
 
@@ -828,13 +803,12 @@ RECOMP_PATCH void Gfx_Render(void *unused) {
     gFrontBufferID = 0;
 
     while(1) {
-        if (D_802A5330.validCount >= D_802A5330.msgCount) {
-            //osRecvMesg(&D_802A5330, &sp54, 1);
+        if (D_802A5330.validCount > D_802A5330.msgCount) {
+            recomp_printf("[Gfx_Render] validCount was > msgCount.\n");
+            osRecvMesg(&D_802A5330, &sp54, 1);
         }
-        // @recomp this extra wait is probably used to deal with lag, but it causes
-        // recomp to run this function at 30 FPS. Stub the extra wait, as this is
-        // not necessary.
-        //osRecvMesg(&D_802A5330, &D_802A5398, 0);
+        // wait for Gfx_EndRender to message the GFX that its ready.
+        osRecvMesg(&D_802A5330, &D_802A5398, 1);
 
         // the current ID is considered the front. Get ready to use it to build the final task to send.
         bufferIDbackup = gFrontBufferID;
@@ -857,15 +831,435 @@ RECOMP_PATCH void Gfx_Render(void *unused) {
         scTask->list.t.data_size = (gBufferEnds[bufferIDbackup] - gGfxWork[bufferIDbackup].main) * sizeof(Gfx);
         scTask->msgQ = &D_802A53A0;
         scTask->msg = &D_802A53B8;
-        //osWritebackDCache(gGfxWorkPtr, 0x10000);
-
-        startGfxWait(&gGfxWork[bufferIDbackup].main);
+        osWritebackDCache(gGfxWorkPtr, 0x10000);
 
         func_80237A90(scTask);
-        func_80237A70(&D_802A53A0, &sp5C);
-
-        waitForGfxFinish();
+        func_80237A70(&D_802A53A0, &sp5C);               
         func_8022997C();
         D_802A5394 = D_802A5398;
     }
+}
+
+RECOMP_EXPORT void printGbi(const char *stringAddr) {
+    if (gMasterDisplayList) {
+        gEXPrint(gMasterDisplayList++, stringAddr);
+    } else {
+        recomp_printf("printGbi was called, but gMasterDisplayList is not yet initialized. Function: %s\n", stringAddr);
+    }
+}
+
+extern void func_80237F44(void*);
+
+/**
+ * The frame is done by now. Perform the last effect on the current buffer and send it off for rendering.
+ */
+RECOMP_PATCH void Gfx_EndRender(Gfx* gfx) {
+    s32 i;
+
+    // Certain events in game use a "motion blur"-ing for effects (example: boss intros). If
+    // this is on, perform this blurring effect.
+    if (gMotionBlur != 0) {
+        gSPTexture(gfx++, 0x8000, 0x8000, 0, G_TX_RENDERTILE, G_ON);
+        gDPSetRenderMode(gfx++, G_RM_CLD_SURF, G_RM_CLD_SURF2);
+        gDPSetPrimColor(gfx++, 0, 0, 0, 0, 0, gMotionBlurStrength);
+        gDPSetCombineMode(gfx++, G_CC_CUSTOM, G_CC_CUSTOM);
+        gDPSetTexturePersp(gfx++, G_TP_NONE);
+        gDPSetTextureLUT(gfx++, G_TT_NONE);
+        gDPSetAlphaCompare(gfx++, G_AC_NONE);
+
+        for (i = 0; i < 240; i+=2) {
+            gDPLoadTextureBlock(gfx++,
+                (u32)OS_PHYSICAL_TO_K0((u8*)D_80100000 + ((gBackBufferID ^ 1) * 240 * 320 * sizeof(u16))) + i * 320 * (s32)sizeof(u16),
+                G_IM_FMT_RGBA,
+                G_IM_SIZ_16b,
+                320,
+                2,
+                0,
+                G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+
+            gSPTextureRectangle(gfx++, 0 << 2, i << 2, 320 << 2, (i + 2) << 2, 0, 0, 0, 1 << 10, 1 << 10);
+        }
+    }
+    gDPFullSync(gfx++);
+    gSPEndDisplayList(gfx++);
+    gBufferEnds[gBackBufferID] = gfx; // set the ptr to the end of the gfx area.
+
+    // if rendering has paused, do not send it to the scheduler handler.
+    if (gPauseRender != 0) {
+        osSendMesg(&D_802A5330, D_8029F600, 0);
+    }
+
+    func_80237F44(&D_802A5348);
+    D_8029F600++;
+}
+
+struct UnkStruct800AED78_InnerUnk0 {
+    void *unk0;
+    char pad4[0x8];
+    s32 unkC;
+    f32 unk10;
+    f32 unk14;
+    f32 unk18;
+    char pad1C[0x1A];
+    s16 unk36;
+    char unk38[0x4];
+    u32 unk3C; // model ptr
+}; // size: at least 0x38
+
+struct UnkStruct800AED78 {
+    struct UnkStruct800AED78_InnerUnk0 *unk0;  
+    void *unk4;
+    s32 fileID;
+};
+
+extern struct UnkStruct800AED78 D_800AED78[];
+extern s32 D_802AC884;
+
+void *func_8026CE28(s32 fileID);
+
+extern void *func_8022A6C4(void *, s32);
+
+// Room_Load
+RECOMP_PATCH void func_80243A50(s32 fileID, f32 arg1, f32 arg2, f32 arg3, s32 arg4, s16 arg5) {
+    //recomp_printf("[Room_Load] (fileID) 0x%08X (xPos) %.6f (yPos) %.6f (zPos) %.6f (arg4) 0x%08X (arg5) 0x%08X\n", fileID, arg1, arg2, arg3, arg4, arg5);
+    D_800AED78[D_802AC884].unk4 = func_8026CE28(fileID);
+    //recomp_printf("[Room_Load] after func_8026CE28 call\n");
+    D_800AED78[D_802AC884].unk0 = func_8022A6C4(D_800AED78[D_802AC884].unk4, arg4);
+    //recomp_printf("[Room_Load] after func_8022A6C4 call\n");
+    D_800AED78[D_802AC884].unk0->unk10 = arg1;
+    D_800AED78[D_802AC884].unk0->unk14 = arg2;
+    D_800AED78[D_802AC884].unk0->unk18 = arg3;
+    if (arg4 == 0x60) {
+        D_800AED78[D_802AC884].unk0->unkC |= 0x80;
+        if (arg5 != 0) {
+            D_800AED78[D_802AC884].unk0->unk36 = arg5;
+        }
+    }
+    D_800AED78[D_802AC884].fileID = fileID;
+    //recomp_printf("[Room_Load] Model ptr set to: 0x%08X (0x%08X)\n", D_800AED78[D_802AC884].unk4, D_800AED78[D_802AC884].unk0->unk3C);
+    D_802AC884++;
+}
+
+extern s32 func_8022616C(s32*, s32, s32, s32);                   /* extern */
+extern s32 func_80226368(s32);                               /* extern */
+extern s32 func_80226604(s32, s32);                          /* extern */
+extern s32 func_802267E0(s32);                                 /* extern */
+extern s32 func_8026CD24(s32);                        /* extern */
+extern s32 func_80292BD0(s32, void *, s32);                     /* extern */
+
+struct UnkStructD_800A7F30 {
+    s32 fileID;
+    void *unk4;
+    char pad8[0x4];
+    s32 unkC;
+};
+
+extern struct UnkStructD_800A7F30 D_800A7F30[];
+extern s32 D_802AFC30;
+
+struct TextureTrack {
+    int tracking;
+    s32 fileID;
+    void *basePtr;
+    void *ptr;
+};
+
+// At this time, this only supports 1 tracked texture at a time.
+struct TextureTrack gTrackedTexture = {
+    0, // disabled
+    0,
+    0,
+};
+
+// interpolation file IDs
+#define GG1_DIAMOND_ID 0x2A5 //  677 (Green Gardens 1 diamond [red])
+#define GG3_DIAMOND_ID 0x2A6 //  678 (Green Gardens 3 diamond [blue])
+
+// skybox file IDs
+#define WG3_SKYBOX_1_ID 0x279 // 633 (White Glacier 3 1st skybox)
+
+RECOMP_EXPORT int isFileTrackable(s32 fileID) {
+    switch(fileID) {
+        case WG3_SKYBOX_1_ID:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+RECOMP_EXPORT void clearTrackedTexture(void) {
+    gTrackedTexture.tracking = 0;
+    gTrackedTexture.fileID = 0;
+    gTrackedTexture.basePtr = 0;
+    gTrackedTexture.ptr = 0;
+}
+
+// allocate and load model
+RECOMP_PATCH void *func_8026CE28(s32 fileID) {
+    s32 id;
+    s32 size;
+    s32 sp24;
+    s32 diamondWasLoaded = 0;
+    s32 stretchTextureWasLoaded = 0;
+
+    // handle diamond.
+    if (fileID == GG1_DIAMOND_ID || fileID == GG3_DIAMOND_ID) {
+        //recomp_printf("-------------------------------------\n");
+        //recomp_printf("fileID %d load; diamond was loaded!\n\n", fileID);
+        diamondWasLoaded = 1;
+    }
+
+    // handle specific textures (skyboxes usually) which need to stretch.
+    if (isFileTrackable(fileID) == 1) {
+        if (gTrackedTexture.tracking == 1) {
+            recomp_printf("WARNING: Two stretched textures (new fileID: %d) are being requested to be tracked. This is NOT supported at this time. Overwriting current tracking entry.\n", fileID);
+        }
+        gTrackedTexture.tracking = 1;
+        gTrackedTexture.fileID = fileID;
+        recomp_printf("-------------------------------------\n");
+        recomp_printf("fileID %d load; white glacier 3 skybox was loaded! Tracking file.\n\n", fileID);
+        stretchTextureWasLoaded = 1;
+    }
+
+    if (fileID == -1) {
+        return (void*)-1;
+    }
+    id = func_8026CD24(fileID);
+    if (fileID != D_800A7F30[id].fileID) {
+        D_802AFC30 += 1;
+        D_800A7F30[id].fileID = fileID;
+        func_802267E0(0x18);
+        sp24 = func_80226604(fileID, 1);
+        func_8022616C(&size, 4, 1, sp24);
+        D_800A7F30[id].unk4 = func_802998EC(size); // malloc
+        func_80292BD0(sp24, D_800A7F30[id].unk4, size);
+        func_80226368(sp24);
+    }
+    D_800A7F30[id].unkC++;
+
+    /**
+     * Handle @recomp fixes for specific files.
+     */
+    if (diamondWasLoaded) {
+        u32 *assetPtr = (u32*)D_800A7F30[id].unk4;
+
+        //recomp_printf("Diamond was loaded to: 0x%08X\n\n", D_800A7F30[id].unk4);
+
+        // @recomp now that the diamond was loaded, we need to gracefully handle
+        // fixing the animation depending on which one was loaded.
+        switch(fileID) {
+            case GG1_DIAMOND_ID: {
+                assetPtr[0xB54/4] = 0x43B40000;   // 90.0f -> 360.0f
+                assetPtr[0xB70/4] = 0x0000003C*4; // multiply anim timer by 4
+                assetPtr[0xB7C/4] = 0x0000003C*4; // multiply anim timer by 4
+                assetPtr[0xB90/4] = 0x0000003C*4; // multiply anim timer by 4
+                break;
+            }
+            case GG3_DIAMOND_ID: {
+                assetPtr[0xCEC/4] = 0x43B40000;   // 90.0f -> 360.0f
+                assetPtr[0xD08/4] = 0x0000003C*4; // multiply anim timer by 4
+                assetPtr[0xD14/4] = 0x0000003C*4; // multiply anim timer by 4
+                assetPtr[0xD28/4] = 0x0000003C*4; // multiply anim timer by 4
+                break;
+            }
+        }
+    }
+
+    if (stretchTextureWasLoaded) {
+        gTrackedTexture.basePtr = D_800A7F30[id].unk4;
+        recomp_printf("Skybox was loaded to: 0x%08X\n", D_800A7F30[id].unk4);
+        recomp_printf("-------------------------------------\n");
+    }
+
+    return D_800A7F30[id].unk4;
+}
+
+/**
+ * Draw the backdrop color if its enabled and set.
+ */
+RECOMP_PATCH void Gfx_DrawBackdrop(Gfx** gfxP) {
+    Gfx *gfx = *gfxP;
+
+    //gEXSetRectAspect(gfx++, G_EX_ASPECT_STRETCH);
+    gSPDisplayList(gfx++, D_8029F7A0);
+    gDPFillRectangle(gfx++, gScreenUlx, gScreenUly, gScreenLrx - 1, gScreenLry - 1);
+    gDPPipeSync(gfx++);
+    gDPSetColorImage(gfx++, G_IM_FMT_RGBA, G_IM_SIZ_16b, 320, D_1000000);
+    if (gDrawBackdrop != 0) {
+        gDPSetFillColor(gfx++, (GPACK_RGBA5551(gDrawBackdropRedColor, gDrawBackdropGreenColor, gDrawBackdropBlueColor, 1) << 0x10) | GPACK_RGBA5551(gDrawBackdropRedColor, gDrawBackdropGreenColor, gDrawBackdropBlueColor, 1));
+        gDPFillRectangle(gfx++, gScreenUlx, gScreenUly, gScreenLrx - 1, gScreenLry - 1);
+        gDPPipeSync(gfx++);
+    }
+    gDPSetCycleType(gfx++, G_CYC_1CYCLE);
+    //gEXSetRectAspect(gfx++, G_EX_ASPECT_AUTO);
+    *gfxP = gfx;
+}
+
+extern void func_8029A3F4(void*); // _free_internal
+
+RECOMP_EXPORT void breakpoint_me(void *ptr) {
+    //recomp_printf("[free] Hook called, ptr value was in suspect range! 0x%08X\n", (u32)ptr);
+}
+
+RECOMP_EXPORT void free_hook(void *ptr) {
+    if ((u32)ptr >= 0x80310000 && (u32)ptr <= 0x80320000) {
+        breakpoint_me(ptr);
+    }
+    func_8029A3F4(ptr);
+}
+
+struct UnkHackStruct802A8970 {
+    /* 0x00 */ OSMesg mesg;
+    u8 unk[0x38];
+};
+
+extern OSMesgQueue D_802A8938;
+extern OSMesgQueue D_802A8958;
+extern OSMesg D_802A8950;
+extern struct UnkHackStruct802A8970 D_802A8970;
+extern OSSched D_802A89B0;
+extern OSScClient D_802AAC40;
+extern s32 gThreadFrameCount;
+
+/*
+ * Run the current queues for the thread manager.
+ */
+RECOMP_PATCH void ThreadProc_RunQueues(void *unused) {
+    int loop;
+    u8 pad[4];
+    OSMesg sendMsg;
+    OSMesg recvMsg;
+
+    recvMsg = NULL;
+    osCreateMesgQueue(&D_802A8938, &D_802A8950, 1);
+    osCreateMesgQueue(&D_802A8958, &D_802A8970.mesg, 0x10);
+    osScAddClient(&D_802A89B0, &D_802AAC40, &D_802A8938);
+    gThreadFrameCount = 0;
+
+    loop = 1; // somehow, this avoids a thread nop loop.
+    while (loop) {
+        if (D_802A8938.validCount > D_802A8938.msgCount) {
+            recomp_printf("[ThreadProc_RunQueues] validCount was > msgCount.\n");
+            osRecvMesg(&D_802A8938, &recvMsg, 1);
+        }
+        osRecvMesg(&D_802A8938, &recvMsg, 1);
+
+        switch (*(s16*)recvMsg) {
+            case 4:
+                break;
+            case 1:
+                gThreadFrameCount++; //! @bug: It will never happen in normal gameplay, but this will overflow after about 2 years of running. Does not seem to cause any crashes though.
+                if (osRecvMesg(&D_802A8958, &sendMsg, 0) != -1) {
+                    do {
+                        osSendMesg(sendMsg, 0, 0);
+                    } while (osRecvMesg(&D_802A8958, &sendMsg, 0) != -1);
+                }
+                break;
+        }
+    }
+}
+
+int gfxCheckStretch(u32 *ptr) {
+    if (gTrackedTexture.tracking && (gTrackedTexture.ptr == (u8*)ptr)) {
+        //recomp_printf("[gfxCheckStretch] file that was provided is being tracked (%d)\n", gTrackedTexture.fileID);
+        /*
+        recomp_printf("Value passed from input:       0x%08X\n", (u32)gfxP);
+        recomp_printf("Value passed from input (Gfx): 0x%08X\n", (u32)gfx);
+        recomp_printf("Sanity check Value 1: 0x%08X\n", ((u32*)gfx)[-2]);
+        recomp_printf("Sanity check Value 2: 0x%08X\n", ((u32*)gfx)[-1]);
+        recomp_printf("Sanity check Value 3: 0x%08X\n", ((u32*)gfx)[0]);
+        recomp_printf("Sanity check Value 4: 0x%08X\n", ((u32*)gfx)[1]);
+        *gfxP = gfx;
+        */
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+typedef struct unk1 {
+    s32 unk0;
+    u16 unk4;
+    u16 unk6;
+    s32 unk8;
+} unk1;
+
+typedef struct unk2 {
+    s8 unk0[0x20];
+    s32 unk_20;
+    void *unk_24;
+    f32 unk_28;
+    f32 unk_2C;
+} unk2;
+
+RECOMP_PATCH s32 func_80264070(Gfx** gfxP, unk1* arg1, s32 arg2, unk2* arg3) {
+    Gfx* gfx;
+    unk1* temp_v0;
+    s32 var_t0;
+    u16 temp_t3;
+    u16 temp_t4;
+    s32 temp_t5;
+    void *temp_v0_2;
+    s32 temp_t1;
+    s32 pad;
+
+    gfx = *gfxP;
+
+    // FAKE
+    temp_t4 = 1;
+    temp_v0 = (u8*)arg1 + (arg2 + temp_t4) * sizeof(unk1);
+
+    gDPSetTexturePersp(gfx++, G_TP_NONE);
+    gDPSetCombineMode(gfx++, G_CC_DECALRGBA, G_CC_DECALRGBA);
+    gSPTexture(gfx++, 0x8000, 0x8000, 0, G_TX_RENDERTILE, G_ON);
+    temp_t1 = temp_v0->unk0;
+    temp_t3 = temp_v0->unk4;
+    temp_t4 = temp_v0->unk6;
+    temp_t5 = temp_v0->unk8;
+
+    switch (temp_t1) {
+        case 18:
+            temp_v0++;
+            if (temp_v0->unk0 != 0x1A) {
+                return 0;
+            }
+            temp_v0_2 = ((u8*)arg1 + temp_v0->unk8);
+
+            gDPSetTextureLUT(gfx++, G_TT_RGBA16);
+            gDPLoadTLUT_pal16(gfx++, 0, temp_v0_2);
+            var_t0 = 0;
+            break;
+        case 21:
+            temp_v0++;
+            if (temp_v0->unk0 != 0x1A) {
+                return 0;
+            }
+            temp_v0_2 = ((u8*)arg1 + temp_v0->unk8);
+            gDPSetTextureLUT(gfx++, G_TT_RGBA16);
+            gDPLoadTLUT_pal256(gfx++, temp_v0_2);
+            var_t0 = 1;
+            break;
+        case 22:
+            gDPSetTextureLUT(gfx++, G_TT_NONE);
+            var_t0 = 2;
+            break;
+        case 25:
+            gDPSetTextureLUT(gfx++, G_TT_NONE);
+            var_t0 = 3;
+            break;
+        default:
+            return 0;
+    }
+
+    *gfxP = gfx;
+    arg3->unk_28 = temp_t3;
+    arg3->unk_2C = temp_t4;
+    arg3->unk_20 = var_t0;
+    arg3->unk_24 = ((u8*)arg1 + temp_t5);
+
+    if (gTrackedTexture.tracking && gTrackedTexture.basePtr == arg1) {
+        gTrackedTexture.ptr = arg3->unk_24; // update the ptr to the actual skybox texture ptr.
+    }
+
+    return 1;
 }
