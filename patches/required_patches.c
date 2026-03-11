@@ -657,10 +657,6 @@ RECOMP_PATCH void Gfx_SetScreenCoords(s32 ulx, s32 uly, s32 width, s32 height) {
 }
 
 RECOMP_PATCH void func_80227D50(struct UnkStruct802AC5C0* arg0, u32 arg1, u32 arg2, u32 arg3, u32 arg4) {
-    arg1 = 0;
-    arg2 = 0;
-    arg3 = 320;
-    arg4 = 240;
     arg0->unk0 = (arg3 << 1);
     arg0->unk2 = (arg4 << 1);
     arg0->unk4 = 0x1FF;
@@ -753,8 +749,8 @@ RECOMP_PATCH void func_80225840(void *arg0) {
         }
 
         // on the 8th frame, run these once. Otherwise, the loop is the above.
-        func_80227D50(D_802AC5C0, 8, 6, 304, 228);
-        Gfx_SetScreenCoords(8, 6, 304, 228);
+        func_80227D50(D_802AC5C0, 0, 0, 320, 240);
+        Gfx_SetScreenCoords(0, 0, 320, 240);
         osViBlack(0);
     }
 }
@@ -965,24 +961,46 @@ struct TextureTrack {
     void *ptr;
 };
 
-// At this time, this only supports 1 tracked texture at a time.
-struct TextureTrack gTrackedTexture = {
-    0, // disabled
-    0,
-    0,
-    0,
+// tracked skyboxes
+struct TextureTrack gTrackedSkyboxes[2] = 
+{
+    {
+        0, // disabled
+        0,
+        0,
+        0,
+    },
+    {
+        0, // disabled
+        0,
+        0,
+        0,
+    }
+};
+
+struct TextureTrack gSpecialLoadedBG = {
+    {
+        0, // disabled
+        0,
+        0,
+        0,
+    }
 };
 
 // interpolation file IDs
 #define GG1_DIAMOND_ID 0x2A5 //  677 (Green Gardens 1 diamond [red])
 #define GG3_DIAMOND_ID 0x2A6 //  678 (Green Gardens 3 diamond [blue])
 
-// skybox file IDs
-#define WG3_SKYBOX_1_ID 0x279 // 633 (White Glacier 3 1st skybox)
+// special BGs to tag as they are not skyboxes.
+#define WORLD_SELECT_BG_FILE_ID       0x37
+#define BATTLE_SELECT_BG_FILE_ID      0x30
+#define CUSTOM_BOMBERMAN_MENU_FILE_ID 0x43
 
 RECOMP_EXPORT int isFileTrackable(s32 fileID) {
     switch(fileID) {
-        case WG3_SKYBOX_1_ID:
+        case WORLD_SELECT_BG_FILE_ID:
+        case BATTLE_SELECT_BG_FILE_ID:
+        case CUSTOM_BOMBERMAN_MENU_FILE_ID:
             return 1;
         default:
             return 0;
@@ -990,10 +1008,12 @@ RECOMP_EXPORT int isFileTrackable(s32 fileID) {
 }
 
 RECOMP_EXPORT void clearTrackedTexture(void) {
-    gTrackedTexture.tracking = 0;
-    gTrackedTexture.fileID = 0;
-    gTrackedTexture.basePtr = 0;
-    gTrackedTexture.ptr = 0;
+    for(int i = 0; i < 2; i++) {
+        gTrackedSkyboxes[i].tracking = 0;
+        gTrackedSkyboxes[i].fileID = 0;
+        gTrackedSkyboxes[i].basePtr = 0;
+        gTrackedSkyboxes[i].ptr = 0;
+    }
 }
 
 // allocate and load model
@@ -1002,7 +1022,7 @@ RECOMP_PATCH void *func_8026CE28(s32 fileID) {
     s32 size;
     s32 sp24;
     s32 diamondWasLoaded = 0;
-    s32 stretchTextureWasLoaded = 0;
+    s32 specialBGwasLoaded = 0;
 
     // handle diamond.
     if (fileID == GG1_DIAMOND_ID || fileID == GG3_DIAMOND_ID) {
@@ -1011,16 +1031,13 @@ RECOMP_PATCH void *func_8026CE28(s32 fileID) {
         diamondWasLoaded = 1;
     }
 
-    // handle specific textures (skyboxes usually) which need to stretch.
-    if (isFileTrackable(fileID) == 1) {
-        if (gTrackedTexture.tracking == 1) {
-            recomp_printf("WARNING: Two stretched textures (new fileID: %d) are being requested to be tracked. This is NOT supported at this time. Overwriting current tracking entry.\n", fileID);
-        }
-        gTrackedTexture.tracking = 1;
-        gTrackedTexture.fileID = fileID;
-        recomp_printf("-------------------------------------\n");
-        recomp_printf("fileID %d load; white glacier 3 skybox was loaded! Tracking file.\n\n", fileID);
-        stretchTextureWasLoaded = 1;
+    // used to track the 3 special BGs that require special handling.
+    if (isFileTrackable(fileID)) {
+        recomp_printf("------------------------------------------\n");
+        recomp_printf("special BG 0x%08X was loaded.\n\n", fileID);
+        gSpecialLoadedBG.tracking = 1;
+        gSpecialLoadedBG.fileID = fileID;
+        specialBGwasLoaded = 1;
     }
 
     if (fileID == -1) {
@@ -1067,10 +1084,15 @@ RECOMP_PATCH void *func_8026CE28(s32 fileID) {
         }
     }
 
-    if (stretchTextureWasLoaded) {
-        gTrackedTexture.basePtr = D_800A7F30[id].unk4;
-        recomp_printf("Skybox was loaded to: 0x%08X\n", D_800A7F30[id].unk4);
-        recomp_printf("-------------------------------------\n");
+    if (specialBGwasLoaded) {
+        gSpecialLoadedBG.basePtr = D_800A7F30[id].unk4;
+        recomp_printf("base ptr: 0x%08X\n", gSpecialLoadedBG.basePtr);
+        recomp_printf("------------------------------------------\n");
+    }
+
+    // we loaded in a different file into the EXACT same addr. Stop tracking it for safety.
+    if (gSpecialLoadedBG.fileID != fileID && gSpecialLoadedBG.basePtr == D_800A7F30[id].unk4) {
+        gSpecialLoadedBG.tracking = 0;
     }
 
     return D_800A7F30[id].unk4;
@@ -1161,18 +1183,13 @@ RECOMP_PATCH void ThreadProc_RunQueues(void *unused) {
     }
 }
 
+// @recomp We will check if the ptr is either of the loaded skyboxes being tracked.
 int gfxCheckStretch(u32 *ptr) {
-    if (gTrackedTexture.tracking && (gTrackedTexture.ptr == (u8*)ptr)) {
-        //recomp_printf("[gfxCheckStretch] file that was provided is being tracked (%d)\n", gTrackedTexture.fileID);
-        /*
-        recomp_printf("Value passed from input:       0x%08X\n", (u32)gfxP);
-        recomp_printf("Value passed from input (Gfx): 0x%08X\n", (u32)gfx);
-        recomp_printf("Sanity check Value 1: 0x%08X\n", ((u32*)gfx)[-2]);
-        recomp_printf("Sanity check Value 2: 0x%08X\n", ((u32*)gfx)[-1]);
-        recomp_printf("Sanity check Value 3: 0x%08X\n", ((u32*)gfx)[0]);
-        recomp_printf("Sanity check Value 4: 0x%08X\n", ((u32*)gfx)[1]);
-        *gfxP = gfx;
-        */
+    if (gTrackedSkyboxes[0].tracking && (gTrackedSkyboxes[0].ptr == (u8*)ptr)) {
+        return 1;
+    } else if (gTrackedSkyboxes[1].tracking && (gTrackedSkyboxes[1].ptr == (u8*)ptr)) {
+        return 1;
+    } else if (gSpecialLoadedBG.tracking && gSpecialLoadedBG.ptr == (u8*)ptr) {
         return 1;
     } else {
         return 0;
@@ -1259,9 +1276,114 @@ RECOMP_PATCH s32 func_80264070(Gfx** gfxP, unk1* arg1, s32 arg2, unk2* arg3) {
     arg3->unk_20 = var_t0;
     arg3->unk_24 = ((u8*)arg1 + temp_t5);
 
-    if (gTrackedTexture.tracking && gTrackedTexture.basePtr == arg1) {
-        gTrackedTexture.ptr = arg3->unk_24; // update the ptr to the actual skybox texture ptr.
+    if (gTrackedSkyboxes[0].tracking && gTrackedSkyboxes[0].basePtr == arg1) {
+        gTrackedSkyboxes[0].ptr = arg3->unk_24; // update the ptr to the actual skybox texture ptr.
+    } else if (gTrackedSkyboxes[1].tracking && gTrackedSkyboxes[1].basePtr == arg1) {
+        gTrackedSkyboxes[1].ptr = arg3->unk_24; // update the ptr to the actual skybox texture ptr.
+    }
+
+    // Track the special BGs
+    if (gSpecialLoadedBG.tracking && gSpecialLoadedBG.basePtr == arg1) {
+        gSpecialLoadedBG.ptr = arg3->unk_24;
     }
 
     return 1;
+}
+
+extern s32 D_802A1B50;
+
+typedef struct {
+    int Unk00;     // Offset: 0x00
+    int UnkFlags1;     // Offset: 0x04
+    int FileID;     // Offset: 0x08
+    int UnkFlags2;     // Offset: 0x0C
+    int UnkFlags3;     // Offset: 0x10
+    int UnkFlags4;     // Offset: 0x14
+    float ScrollXSpeed;     // Offset: 0x18
+    float ScrollYSpeed;     // Offset: 0x1C
+    float ScrollX;     // Offset: 0x20
+    float ScrollY;     // Offset: 0x24
+    float OffsetX;     // Offset: 0x28
+    float OffsetY;     // Offset: 0x2C
+    float ResX;     // Offset: 0x30
+    float ResY;     // Offset: 0x34
+    float ShiftX;     // Offset: 0x38
+    float ShiftY;     // Offset: 0x3C
+    float ScaleX;     // Offset: 0x40
+    float ScaleY;     // Offset: 0x44
+    float ImageWidth;     // Offset: 0x48
+    float ImageHeight;     // Offset: 0x4C
+} SkyBox;
+
+extern SkyBox D_802B0260;
+
+struct UnkStruct802B0300_Inner {
+    char pad[0x10];
+    u16 unk10;
+    u16 unk12;
+};
+
+struct UnkStruct802B0300 {
+    struct UnkStruct802B0300_Inner *unk0;
+};
+
+struct UnkStruct802B0308_Inner {
+    char pad[0xC];
+    u32 unkC;
+    f32 unk10;
+    f32 unk14;
+    f32 unk18;
+    f32 unk1C;
+    f32 unk20;
+    f32 unk24;
+};
+
+struct UnkStruct802B0308 {
+    struct UnkStruct802B0308_Inner *unk0;
+};
+
+extern struct UnkStruct802B0300 D_802B0300[];
+extern struct UnkStruct802B0308 D_802B0308[];
+
+extern void func_80287904();
+
+// init_skybox
+RECOMP_PATCH SkyBox* func_80287DC0(s32 fileID) {
+    SkyBox* skybox = &D_802B0260;
+    s32 i;
+
+    for(i = 0; i < 2; i++) {
+        // find a non-used skybox to init in.
+        if (skybox->UnkFlags1 == 0) {
+            skybox->Unk00 = i;
+            skybox->FileID = fileID;
+            skybox->UnkFlags1 = (s32) (skybox->UnkFlags1 | 0x80000000);
+            skybox->UnkFlags2 = 0x400;
+            skybox->UnkFlags3 = 0x40;
+            D_802B0300[skybox->Unk00].unk0 = func_8026CE28(fileID);
+
+            // track the skybox using the current skybox ID since 2 are loaded at the same time.
+            gTrackedSkyboxes[skybox->Unk00].tracking = 1;
+            gTrackedSkyboxes[skybox->Unk00].fileID = fileID;
+            gTrackedSkyboxes[skybox->Unk00].basePtr = D_802B0300[skybox->Unk00].unk0;
+
+            D_802B0308[skybox->Unk00].unk0 = func_8022A6C4(D_802B0300[skybox->Unk00].unk0, skybox->UnkFlags3);
+            skybox->UnkFlags2 |= D_802B0308[skybox->Unk00].unk0->unkC;
+            skybox->ImageWidth = D_802B0300[skybox->Unk00].unk0->unk10;
+            skybox->ImageHeight = D_802B0300[skybox->Unk00].unk0->unk12;
+            D_802B0308[skybox->Unk00].unk0->unk10 = skybox->OffsetX;
+            D_802B0308[skybox->Unk00].unk0->unk14 = skybox->OffsetY;
+            D_802B0308[skybox->Unk00].unk0->unk18 = skybox->ResX;
+            D_802B0308[skybox->Unk00].unk0->unk1C = skybox->ResY;
+            D_802B0308[skybox->Unk00].unk0->unk20 = 0;
+            D_802B0308[skybox->Unk00].unk0->unk24 = 0;
+            if (D_802A1B50 == -1) {
+                D_802A1B50 = HuPrcCreate(&func_80287904, 0, 0, 0, 0x403);
+                Gfx_SetBackdropEnabled(0);
+            }
+            return skybox;
+        }
+        skybox++;
+    }
+    return NULL;
 }
