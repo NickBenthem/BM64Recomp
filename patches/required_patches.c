@@ -4,6 +4,8 @@
 #include "PR/sched.h"
 #include "ultra_extensions.h"
 
+#define ENABLE_WIDESCREEN_ASPECT_CHANGES
+
 enum OverlayIDLoaded {
     UNSUPPORTED_OVERLAY = -1,
     // ovlbank 1
@@ -643,32 +645,48 @@ RECOMP_PATCH void func_8022787C(Gfx** mainGfx) {
 }
 
 extern void osViSetSpecialFeatures__0x0000__secure_call(s32);
-void func_80227D50(struct UnkStruct802AC5C0* arg0, u32 arg1, u32 arg2, u32 arg3, u32 arg4);
 
 RECOMP_PATCH void Gfx_SetScreenCoords(s32 ulx, s32 uly, s32 width, s32 height) {
-    ulx = 0;
-    uly = 0;
-    width = 320;
-    height = 240;
     gScreenUlx = ulx;
     gScreenUly = uly;
     gScreenLrx = (ulx + width);
     gScreenLry = (uly + height);
 }
 
-RECOMP_PATCH void func_80227D50(struct UnkStruct802AC5C0* arg0, u32 arg1, u32 arg2, u32 arg3, u32 arg4) {
-    arg0->unk0 = (arg3 << 1);
-    arg0->unk2 = (arg4 << 1);
-    arg0->unk4 = 0x1FF;
-    arg0->unk6 = 0;
-    arg0->unk8 = (((arg1 << 1) + arg3) << 1);
-    arg0->unkA = (((arg2 << 1) + arg4) << 1);
-    arg0->unkC = 0x1FF;
-    arg0->unkE = 0;
-    arg0->unk5C = arg1;
-    arg0->unk60 = arg2;
-    arg0->unk64 = ((arg1 + arg3));
-    arg0->unk68 = ((arg2 + arg4));
+// FBInfo
+typedef struct FBInfo {
+    /* 0x00 */ Vp vp;
+    /* 0x10 */ u32 enabled;
+    /* 0x14 */ u32 unk14;
+    /* 0x18 */ Mtx mtx;
+    /* 0x58 */ u32 unk58;
+    /* 0x5C */ f32 ulx;
+    /* 0x60 */ f32 uly;
+    /* 0x64 */ f32 lrx;
+    /* 0x68 */ f32 lry;
+} FBInfo; // size:0x6C
+
+#ifdef ENABLE_WIDESCREEN_ASPECT_CHANGES
+#define VIEWPORT_SCALE  0.9625
+#define VIEWPORT_OFFSET 6
+#else
+#define VIEWPORT_SCALE  1
+#define VIEWPORT_OFFSET 0
+#endif
+
+RECOMP_PATCH void func_80227D50(FBInfo* fb, u32 ulx, u32 uly, u32 width, u32 height) {
+    fb->vp.vp.vscale[0] = ((width * 2) * VIEWPORT_SCALE) - VIEWPORT_OFFSET;
+    fb->vp.vp.vscale[1] = ((height * 2) * VIEWPORT_SCALE) - VIEWPORT_OFFSET;
+    fb->vp.vp.vscale[2] = (511 * VIEWPORT_SCALE) - VIEWPORT_OFFSET;
+    fb->vp.vp.vscale[3] = (0 * VIEWPORT_SCALE) - VIEWPORT_OFFSET;
+    fb->vp.vp.vtrans[0] = (((ulx * 2) + width) * 2);
+    fb->vp.vp.vtrans[1] = (((uly * 2) + height) * 2);
+    fb->vp.vp.vtrans[2] = 511;
+    fb->vp.vp.vtrans[3] = 0;
+    fb->ulx = ulx;
+    fb->uly = uly;
+    fb->lrx = ((ulx + width));
+    fb->lry = ((uly + height));
 }
 
 extern void (*D_802B36AC)(void *); // __free_hook
@@ -749,8 +767,13 @@ RECOMP_PATCH void func_80225840(void *arg0) {
         }
 
         // on the 8th frame, run these once. Otherwise, the loop is the above.
+#ifdef ENABLE_WIDESCREEN_ASPECT_CHANGES
         func_80227D50(D_802AC5C0, 0, 0, 320, 240);
         Gfx_SetScreenCoords(0, 0, 320, 240);
+#else
+        func_80227D50(D_802AC5C0, 8, 6, 304, 228);
+        Gfx_SetScreenCoords(8, 6, 304, 228);
+#endif
         osViBlack(0);
     }
 }
@@ -1033,8 +1056,8 @@ RECOMP_PATCH void *func_8026CE28(s32 fileID) {
 
     // used to track the 3 special BGs that require special handling.
     if (isFileTrackable(fileID)) {
-        recomp_printf("------------------------------------------\n");
-        recomp_printf("special BG 0x%08X was loaded.\n\n", fileID);
+        //recomp_printf("------------------------------------------\n");
+        //recomp_printf("special BG 0x%08X was loaded.\n\n", fileID);
         gSpecialLoadedBG.tracking = 1;
         gSpecialLoadedBG.fileID = fileID;
         specialBGwasLoaded = 1;
@@ -1045,6 +1068,7 @@ RECOMP_PATCH void *func_8026CE28(s32 fileID) {
     }
     id = func_8026CD24(fileID);
     if (fileID != D_800A7F30[id].fileID) {
+        recomp_printf("[func_8026CE28] Loading FileID: (0x%08X) %d\n", fileID, fileID);
         D_802AFC30 += 1;
         D_800A7F30[id].fileID = fileID;
         func_802267E0(0x18);
@@ -1086,8 +1110,8 @@ RECOMP_PATCH void *func_8026CE28(s32 fileID) {
 
     if (specialBGwasLoaded) {
         gSpecialLoadedBG.basePtr = D_800A7F30[id].unk4;
-        recomp_printf("base ptr: 0x%08X\n", gSpecialLoadedBG.basePtr);
-        recomp_printf("------------------------------------------\n");
+        //recomp_printf("base ptr: 0x%08X\n", gSpecialLoadedBG.basePtr);
+        //recomp_printf("------------------------------------------\n");
     }
 
     // we loaded in a different file into the EXACT same addr. Stop tracking it for safety.
@@ -1183,13 +1207,22 @@ RECOMP_PATCH void ThreadProc_RunQueues(void *unused) {
     }
 }
 
+static int subFileIDLoaded = 0;
+
 // @recomp We will check if the ptr is either of the loaded skyboxes being tracked.
-int gfxCheckStretch(u32 *ptr) {
+int gfxCheckStretch(u32 *ptr, u32 var) {
     if (gTrackedSkyboxes[0].tracking && (gTrackedSkyboxes[0].ptr == (u8*)ptr)) {
         return 1;
     } else if (gTrackedSkyboxes[1].tracking && (gTrackedSkyboxes[1].ptr == (u8*)ptr)) {
         return 1;
     } else if (gSpecialLoadedBG.tracking && gSpecialLoadedBG.ptr == (u8*)ptr) {
+        // is the currently loaded special file the world select graphics?
+        if (gSpecialLoadedBG.fileID == 55) {
+            // are we trying to stretch the world select GFX? dont.
+            if (var == 0x00000C00) {
+                return 0;
+            }
+        }
         return 1;
     } else {
         return 0;
@@ -1386,4 +1419,83 @@ RECOMP_PATCH SkyBox* func_80287DC0(s32 fileID) {
         skybox++;
     }
     return NULL;
+}
+
+// When not building with IDO, use the builtin vaarg macros for portability.
+#ifndef __sgi
+#define va_list __builtin_va_list
+#define va_start __builtin_va_start
+#define va_arg __builtin_va_arg
+#define va_end __builtin_va_end
+#else
+
+typedef char *va_list;
+#define _FP 1
+#define _INT 0
+#define _STRUCT 2
+
+#define _VA_FP_SAVE_AREA 0x10
+#define _VA_ALIGN(p, a) (((unsigned int)(((char *)p) + ((a) > 4 ? (a) : 4) - 1)) & -((a) > 4 ? (a) : 4))
+#define va_start(vp, parmN) (vp = ((va_list)&parmN + sizeof(parmN)))
+
+#define __va_stack_arg(list, mode)                                 \
+  (                                                                \
+      ((list) = (char *)_VA_ALIGN(list, __builtin_alignof(mode)) + \
+                _VA_ALIGN(sizeof(mode), 4)),                       \
+      (((char *)list) - (_VA_ALIGN(sizeof(mode), 4) - sizeof(mode))))
+
+#define __va_double_arg(list, mode)                                                                  \
+  (                                                                                                  \
+      (((long)list & 0x1) /* 1 byte aligned? */                                                      \
+           ? (list = (char *)((long)list + 7), (char *)((long)list - 6 - _VA_FP_SAVE_AREA))          \
+           : (((long)list & 0x2) /* 2 byte aligned? */                                               \
+                  ? (list = (char *)((long)list + 10), (char *)((long)list - 24 - _VA_FP_SAVE_AREA)) \
+                  : __va_stack_arg(list, mode))))
+
+#define va_arg(list, mode) ((mode *)(((__builtin_classof(mode) == _FP &&          \
+                                       __builtin_alignof(mode) == sizeof(double)) \
+                                          ? __va_double_arg(list, mode)           \
+                                          : __va_stack_arg(list, mode))))[-1]
+#define va_end(__list)
+
+#endif
+
+// pass huprintf calls to recomp_printf
+RECOMP_PATCH void func_800018F8(const char *fmt, ...) {
+    recomp_printf("huprintf called\n");
+    va_list arg;
+    va_start(arg, fmt);
+    recomp_printf(fmt, arg);
+    va_end(arg);
+}
+
+extern s32 D_802A5418;
+extern void func_8029B908(void *, f32, f32, f32, f32, f32, f32, f32, f32, f32);
+extern void func_8029BB38(void *, void *);
+
+typedef float Matrix [4][4];
+
+RECOMP_EXPORT void Matrix_Scale(Matrix mf, float x, float y, float z) {
+    mf[0][0] = x;
+    mf[1][1] = y;
+    mf[2][2] = z;
+    mf[3][3] = 1;
+}
+
+static const f32 original_aspect_ratio = (f32)((f32)320/ (f32)240);
+
+// compute floating point matrix from float values for the given FrameBuffer
+RECOMP_PATCH void func_80227CD0(FBInfo *arg0, f32 xEye, f32 yEye, f32 zEye, f32 xAt, f32 yAt, f32 zAt, f32 xUp, f32 yUp, f32 zUp) {
+    func_8029B908(&arg0->mtx, xEye, yEye, zEye, xAt, yAt, zAt, xUp, yUp, zUp); // guLookAt
+    func_8029BB38(&D_802A5418, &arg0->mtx); // guMtxL2F
+
+    // then scale the matrix to account for the border.
+    //f32 scale = (1.0f / recomp_get_target_aspect_ratio(original_aspect_ratio) / original_aspect_ratio);;
+    //Matrix_Scale(&D_802A5418, 1.0f, scale, 1.0f);
+}
+
+extern void func_8029BE20(void *, void *, f32, f32, f32, f32, f32);
+
+RECOMP_PATCH void func_80227C50(f32 fovy, f32 aspect, f32 near, f32 far, f32 scale) {
+    func_8029BE20(&D_802A53D8, &D_802A53D0, fovy, aspect, near, far, scale);
 }
