@@ -629,12 +629,7 @@ RECOMP_PATCH Gfx *Gfx_InitGfx(void) {
     gSPDisplayList(gMasterDisplayList++, D_8029F6D8);
     gDPSetDepthImage(gMasterDisplayList++, D_200000);
     gDPPipeSync(gMasterDisplayList++);
-    gEXSetScissor(gMasterDisplayList++, 0, G_EX_ORIGIN_LEFT, G_EX_ORIGIN_RIGHT, 0, 0, 0, 240);
-    //gEXSetRectAlign(gMasterDisplayList++, G_EX_ORIGIN_NONE, G_EX_ORIGIN_NONE,
-        //0, 0,
-        //0, 0);
-    //gEXSetViewportAlign(gMasterDisplayList++, G_EX_ORIGIN_NONE, 0, 0);
-    //gDPSetScissor(gMasterDisplayList++, G_SC_NON_INTERLACE, 0, 0, 320, 240);
+    gDPSetScissor(gMasterDisplayList++, G_SC_NON_INTERLACE, 0, 0, 320, 240);
     Gfx_DrawBackdrop(&gMasterDisplayList);
     gSPSetGeometryMode(gMasterDisplayList++, G_ZBUFFER | G_CULL_BACK | G_LIGHTING);
     gDPSetRenderMode(gMasterDisplayList++, G_RM_AA_ZB_TEX_EDGE, G_RM_AA_ZB_TEX_EDGE2);
@@ -750,7 +745,7 @@ RECOMP_PATCH void func_8022787C(Gfx** mainGfx) {
             Libc_Memcpy((uintptr_t)gGfxWorkPtr + (D_802A5368 * sizeof(Mtx)), (uintptr_t)&buffer->unk_18, sizeof(Mtx));
             gSPMatrix(gfx++, (uintptr_t)gGfxWorkPtr + (D_802A5368 * sizeof(Mtx)), G_MTX_NOPUSH | G_MTX_MUL | G_MTX_PROJECTION);
             D_802A5368++;
-            gEXSetScissor(gfx++, G_SC_NON_INTERLACE, G_EX_ORIGIN_LEFT, G_EX_ORIGIN_NONE, buffer->ulx, buffer->uly, buffer->lrx, buffer->lry);
+            gDPSetScissor(gfx++, G_SC_NON_INTERLACE, buffer->ulx, buffer->uly, buffer->lrx, buffer->lry);
             gSPDisplayList(gfx++, Gfx_GetSubDLPtr(buffer->unk14));
         }
     }
